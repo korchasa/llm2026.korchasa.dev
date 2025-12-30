@@ -125,6 +125,7 @@ h1 {
     margin-bottom: 2rem;
     opacity: 0;
     animation: fadeUp 1s forwards;
+    will-change: transform, opacity;
 }
 
 .greeting-text {

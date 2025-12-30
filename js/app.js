@@ -29,7 +29,6 @@ const MODEL_CONFIG = {
     }
   };
 
-// --- VISUALS: Snowfall Background ---
 class SnowfallBackground {
     constructor(canvasId) {
         this.canvas = document.getElementById(canvasId);
@@ -436,6 +435,25 @@ class GreetingQueue {
 
 class Typewriter {
     static async type(text, container, checkPause) {
+        // Appending text nodes is much cheaper than creating spans
+        // We'll group text into chunks if possible, or just append characters to a text node
+
+        // Single text node for standard typing?
+        // Or per-word to allow easy wrapping?
+        // Let's use spans for words, or just a single text node that we update.
+        // Actually, updating a single text node's content repeatedly causes layout too.
+        // Best approach for "typing" style without span spam:
+        // Use a single container, append characters. But `container.textContent += char` is also heavy.
+
+        // Revised approach:
+        // Create <span> for words (good for wrapping), append chars to the current word <span>.
+        // Throttle scrolling.
+
+        let currentWordSpan = document.createElement('span');
+        container.appendChild(currentWordSpan);
+
+        let lastScrollTime = 0;
+
         for (let i = 0; i < text.length; i++) {
             // Check for pause
             while (checkPause()) {
@@ -443,15 +461,33 @@ class Typewriter {
             }
 
             const char = text[i];
-            const span = document.createElement('span');
-            span.textContent = char;
-            container.appendChild(span);
 
-            // Auto-scroll
-            window.scrollTo({
-                top: document.body.scrollHeight,
-                behavior: 'smooth'
-            });
+            if (char === ' ') {
+                // New word
+                currentWordSpan = document.createElement('span');
+                // Ensure spaces are preserved
+                // Actually, if we just put a space in the previous span or the new one...
+                // Let's just append the space to the previous span, then make a new one.
+                currentWordSpan.textContent = ' ';
+                container.appendChild(currentWordSpan);
+                // The new span will continue after the space
+            } else if (char === '\n') {
+                container.appendChild(document.createElement('br'));
+                currentWordSpan = document.createElement('span');
+                container.appendChild(currentWordSpan);
+            } else {
+                currentWordSpan.textContent += char;
+            }
+
+            // Throttle Auto-scroll (every 50ms max)
+            const now = Date.now();
+            if (now - lastScrollTime > 50) {
+                 window.scrollTo({
+                    top: document.body.scrollHeight,
+                    behavior: 'smooth'
+                });
+                lastScrollTime = now;
+            }
 
             // Human-like delay
             let delay = 30 + Math.random() * 50;
@@ -460,6 +496,12 @@ class Typewriter {
 
             await new Promise(r => setTimeout(r, delay));
         }
+
+        // Final scroll
+        window.scrollTo({
+            top: document.body.scrollHeight,
+            behavior: 'smooth'
+        });
     }
 }
 

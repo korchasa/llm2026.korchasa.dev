@@ -20,7 +20,7 @@ const MODEL_CONFIG = {
     name: "Qwen3 0.6B",
     model: "onnx-community/Qwen3-0.6B-ONNX",
     hardware: "webgpu",
-    dtype: "q4",
+    dtype: "q4f16",
     params: {
       temperature: 0.7,
       max_new_tokens: 4096,
@@ -329,17 +329,14 @@ class LLMEngine {
         const styles = ["warm", "poetic", "inspirational", "tech-positive", "cozy", "funny"];
         const styleKey = styles[Math.floor(Math.random() * styles.length)];
 
-        // History avoidance
-        const avoid = this.history.slice(-3).map(s => s.slice(0, 50)).join(" | ");
-
         const systemPrompt = langConfig.system || defaultConfig.system;
         const styleDesc = (langConfig.styles ? langConfig.styles[styleKey] : null) ||
                           (defaultConfig.styles[styleKey]) ||
                           (langConfig.styles ? langConfig.styles.warm : defaultConfig.styles.warm);
 
         const userPrompt = langConfig.userTemplate ?
-            langConfig.userTemplate(year, styleDesc, avoid) :
-            defaultConfig.userTemplate(year, styleDesc, avoid).replace(/English/g, langConfig.name);
+            langConfig.userTemplate(year, styleDesc) :
+            defaultConfig.userTemplate(year, styleDesc).replace(/English/g, langConfig.name);
 
         return {
             messages: [

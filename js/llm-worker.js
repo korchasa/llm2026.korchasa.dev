@@ -8,6 +8,7 @@ import { env, AutoTokenizer, AutoModelForCausalLM, TextStreamer } from "https://
 // Configure environment
 env.allowLocalModels = false;
 env.useBrowserCache = true;
+env.backends.onnx.wasm.numThreads = 1;
 
 let tokenizer = null;
 let model = null;

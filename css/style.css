@@ -15,7 +15,8 @@
     box-sizing: border-box;
 }
 
-body, html {
+body,
+html {
     margin: 0;
     padding: 0;
     height: 100%;
@@ -62,7 +63,8 @@ body, html {
 .intro-screen.hidden {
     opacity: 0;
     pointer-events: none;
-    position: absolute; /* Take out of flow */
+    position: absolute;
+    /* Take out of flow */
 }
 
 h1 {
@@ -73,6 +75,7 @@ h1 {
     margin: 0;
     background: linear-gradient(135deg, #fff 0%, #a5b4fc 100%);
     -webkit-background-clip: text;
+    background-clip: text;
     -webkit-text-fill-color: transparent;
     text-shadow: 0 0 30px rgba(165, 180, 252, 0.2);
 }
@@ -86,19 +89,38 @@ h1 {
 
 /* Greeting Display */
 .greeting-display {
-    max-width: 800px;
     width: 100%;
-    min-height: 200px;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    overflow-y: hidden;
+    /* We handle scroll manually or just let it flow? continuous flow usually means auto-scroll */
     display: flex;
     flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    opacity: 0;
-    transition: opacity 1s ease;
+    justify-content: flex-end;
+    /* Start from bottom? or top? continuous usually means appending */
+    align-items: flex-start;
+    /* Full width text usually starts left, but maybe centered? Let's keep it legible. */
+    padding-bottom: 10vh;
+    /* Space at bottom */
+    z-index: 5;
+    pointer-events: none;
+    /* Let clicks pass through to body for pause */
 }
 
-.greeting-display.active {
-    opacity: 1;
+.greeting-content {
+    width: 100%;
+    /* display: flex; flex-direction: column; if we want blocks. */
+    padding: 2rem 4rem;
+    /* Horizontal padding */
+    text-align: left;
+}
+
+.greeting-block {
+    margin-bottom: 2rem;
+    opacity: 0;
+    animation: fadeUp 1s forwards;
 }
 
 .greeting-text {
@@ -106,95 +128,43 @@ h1 {
     font-size: 2rem;
     line-height: 1.6;
     color: var(--text-primary);
-    text-shadow: 0 4px 12px rgba(0,0,0,0.5);
-    animation: breathing 8s ease-in-out infinite;
+    text-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    /* No breathing animation for stream, too distracting? */
 }
 
-@keyframes breathing {
-    0%, 100% { transform: scale(1); opacity: 0.95; }
-    50% { transform: scale(1.01); opacity: 1; }
+@keyframes fadeUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
-.greeting-text span {
-    opacity: 0;
-    animation: fadeChar 0.8s forwards;
-}
+/* Specific styling for new text vs old can be added here */
 
-@keyframes fadeChar {
-    from { opacity: 0; transform: translateY(5px); filter: blur(4px); }
-    to { opacity: 1; transform: translateY(0); filter: blur(0); }
-}
-
-.greeting-meta {
-    margin-top: 2rem;
+/* Status / Progress - Centered */
+.status-bar-center {
     font-family: 'Fira Code', monospace;
-    font-size: 0.8rem;
-    color: var(--text-secondary);
-    opacity: 0.6;
-    display: flex;
-    gap: 1rem;
-    align-items: center;
-}
-
-/* UI Controls (Minimal) */
-.ui-controls {
-    position: fixed;
-    bottom: 2rem;
-    right: 2rem;
-    z-index: 10;
-    display: flex;
-    gap: 1rem;
-    opacity: 0;
-    transition: opacity 0.5s ease;
-}
-
-.container:hover ~ .ui-controls, .ui-controls:hover {
-    opacity: 1;
-}
-
-.icon-btn {
-    background: var(--glass);
-    border: 1px solid var(--border);
-    color: var(--text-secondary);
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.icon-btn:hover {
-    color: var(--text-primary);
-    border-color: var(--text-secondary);
-}
-
-/* Status / Progress */
-.status-bar {
-    position: fixed;
-    bottom: 3rem;
-    left: 50%;
-    transform: translateX(-50%);
-    font-family: 'Fira Code', monospace;
-    font-size: 0.8rem;
+    font-size: 0.9rem;
     color: var(--text-secondary);
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.75rem;
-    z-index: 10;
-    text-align: center;
+    gap: 1rem;
+    margin-top: 2rem;
 }
 
 .progress-track {
-    width: 240px;
-    height: 2px;
-    background: rgba(255,255,255,0.1);
-    border-radius: 2px;
+    width: 300px;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
     overflow: hidden;
-    display: none; /* Hidden by default */
+    display: none;
 }
 
 .progress-track.visible {
@@ -208,22 +178,68 @@ h1 {
     transition: width 0.2s ease;
 }
 
-.blinking-cursor::after {
-    content: '_';
-    animation: blink 1s step-end infinite;
+/* Pause Overlay */
+.pause-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.4);
+    /* Slight dim */
+    backdrop-filter: blur(2px);
+    z-index: 50;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
 }
 
-@keyframes blink {
-    50% { opacity: 0; }
+.pause-overlay.visible {
+    opacity: 1;
+}
+
+.pause-icon {
+    width: 0;
+    height: 0;
+    border-top: 40px solid transparent;
+    border-bottom: 40px solid transparent;
+    border-left: 60px solid rgba(255, 255, 255, 0.8);
+    /* This makes a play button, wait, pause is usually two bars.
+       Actually user asked for "pause effect like full screen players" which usually SHOWS the pause icon when you pause?
+       Or the Play icon when paused? Typically "Pause" icon flashes then "Play" icon stays or vice versa.
+       Let's make a Pause icon symbol (||) */
+}
+
+/* CSS Pause Icon (Double Bar) */
+.pause-overlay.paused .pause-icon {
+    border: none;
+    width: 60px;
+    height: 80px;
+    border-left: 20px solid rgba(255, 255, 255, 0.8);
+    border-right: 20px solid rgba(255, 255, 255, 0.8);
+    box-sizing: content-box;
+    /* ensure border width adds up */
+    padding-right: 0;
 }
 
 /* Responsive */
 @media (max-width: 768px) {
-    h1 { font-size: 2rem; }
-    .greeting-text { font-size: 1.5rem; }
-    .container { padding: 1.5rem; }
-    .ui-controls { opacity: 1; bottom: 1.5rem; right: 1.5rem; }
-    /* Status bar is already centered globally, just adjust bottom margin if needed */
-    .status-bar { bottom: 2rem; width: 80%; }
-    .progress-track { width: 100%; }
+    h1 {
+        font-size: 2rem;
+    }
+
+    .greeting-text {
+        font-size: 1.5rem;
+    }
+
+    .container {
+        padding: 1.5rem;
+    }
+
+    .greeting-content {
+        padding: 2rem;
+    }
 }

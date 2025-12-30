@@ -85,11 +85,9 @@ class LLMEngine {
     constructor() {
         this.worker = null;
 
-        // Runtime Settings
-        const savedSettings = localStorage.getItem('llmhny-settings');
-        this.settings = savedSettings ? JSON.parse(savedSettings) : {
-            langMode: "auto",
-            style: "random"
+        // Settings: Simplified, no localStorage for style
+        this.settings = {
+            langMode: "auto"
         };
 
         // Resolve spec
@@ -125,14 +123,9 @@ class LLMEngine {
     }
 
     detectLang() {
-        if (this.settings.langMode === "auto") {
-            const browserLang = navigator.language || navigator.userLanguage || DEFAULT_LANG;
-            const code = browserLang.split('-')[0].toLowerCase();
-            this.langCode = LANGUAGES[code] ? code : DEFAULT_LANG;
-        } else {
-            const code = this.settings.langMode.toLowerCase();
-            this.langCode = LANGUAGES[code] ? code : DEFAULT_LANG;
-        }
+        const browserLang = navigator.language || navigator.userLanguage || DEFAULT_LANG;
+        const code = browserLang.split('-')[0].toLowerCase();
+        this.langCode = LANGUAGES[code] ? code : DEFAULT_LANG;
         this.langName = LANGUAGES[this.langCode].name;
         console.log("Internal prompt language:", this.langName);
     }
@@ -176,7 +169,6 @@ class LLMEngine {
                 } else if (msg.state === 'ready') {
                      this.isReady = true;
                      this.onStatus("Neural core active");
-                     // We don't trigger anything else, just waiting for user command or loop
                 }
                 break;
             case "progress": {
@@ -235,7 +227,7 @@ class LLMEngine {
             }
         };
 
-        console.log("LLM Request:", request);
+        // console.log("LLM Request:", request);
         this.worker.postMessage(request);
     }
 
@@ -245,12 +237,9 @@ class LLMEngine {
         const langConfig = LANGUAGES[code];
         const defaultConfig = LANGUAGES[DEFAULT_LANG];
 
-        // Style Selection
+        // Random Style Selection
         const styles = ["warm", "poetic", "inspirational", "tech-positive", "cozy", "funny"];
-        let styleKey = this.settings.style;
-        if (styleKey === "random" || !styles.includes(styleKey)) {
-             styleKey = styles[Math.floor(Math.random() * styles.length)];
-        }
+        const styleKey = styles[Math.floor(Math.random() * styles.length)];
 
         // History avoidance
         const avoid = this.history.slice(-3).map(s => s.slice(0, 50)).join(" | ");
@@ -276,136 +265,62 @@ class LLMEngine {
 
 // --- CONTROLLER: Main App Logic ---
 const ui = {
-    intro: document.querySelector('.intro-screen'),
-    greetingDisplay: document.querySelector('.greeting-display'),
-    greetingText: document.querySelector('.greeting-text'),
+    intro: document.getElementById('intro-screen'),
+    greetingDisplay: document.getElementById('greeting-display'),
+    greetingContent: document.getElementById('greeting-content'),
     statusText: document.getElementById('status-text'),
-    progress: document.querySelector('.progress-track'),
+    progress: document.getElementById('progress-track'),
     progressFill: document.querySelector('.progress-fill'),
-    nextBtn: document.getElementById('btn-next'),
-    pauseBtn: document.getElementById('btn-pause'),
-    settingsBtn: document.getElementById('btn-settings'),
-    timestamp: document.getElementById('timestamp'),
-    // Modal
-    settingsModal: document.getElementById('settings-modal'),
-    closeSettingsBtn: document.getElementById('btn-close-settings'),
-    langSelect: document.getElementById('lang-select'),
-    styleSelect: document.getElementById('style-select'),
-    applyBtn: document.getElementById('btn-apply-settings'),
-    resetBtn: document.getElementById('btn-reset-settings')
+    pauseOverlay: document.getElementById('pause-overlay'),
+    loadingText: document.getElementById('loading-text')
 };
 
 const engine = new LLMEngine();
-
-// Populate Languages
-const populateLanguages = () => {
-    Object.keys(LANGUAGES).forEach(code => {
-        const option = document.createElement('option');
-        option.value = code;
-        option.textContent = LANGUAGES[code].name;
-        ui.langSelect.appendChild(option);
-    });
-};
-
-populateLanguages();
-
 let loopTimer = null;
 let isPaused = false;
+let currentBlock = null;
 
 // Background
 new NeuralBackground('bg-canvas');
 
-// Settings Handlers
-const syncUIFromSettings = () => {
-    ui.langSelect.value = engine.settings.langMode;
-    ui.styleSelect.value = engine.settings.style;
-};
-
-ui.settingsBtn.addEventListener('click', () => {
-    syncUIFromSettings();
-    ui.settingsModal.classList.remove('hidden');
-});
-
-ui.closeSettingsBtn.addEventListener('click', () => {
-    ui.settingsModal.classList.add('hidden');
-});
-
-ui.settingsModal.addEventListener('click', (e) => {
-    if (e.target === ui.settingsModal) ui.settingsModal.classList.add('hidden');
-});
-
-// Apply Settings
-ui.applyBtn.addEventListener('click', () => {
-    // Save to settings object
-    engine.settings.langMode = ui.langSelect.value;
-    engine.settings.style = ui.styleSelect.value;
-
-    // Save to localStorage
-    localStorage.setItem('llmhny-settings', JSON.stringify(engine.settings));
-
-    engine.detectLang();
-    ui.settingsModal.classList.add('hidden');
-});
-
-// Reset Settings
-ui.resetBtn.addEventListener('click', () => {
-    if (confirm("Reset all settings to defaults?")) {
-        localStorage.removeItem('llmhny-settings');
-        location.reload();
-    }
-});
-
-// Settings: Model / DType (requires reload)
-const reloadModel = () => {
-    // Reset UI to intro/loading
-    if (loopTimer) clearTimeout(loopTimer);
-    ui.greetingDisplay.classList.remove('active');
-    ui.intro.style.display = 'flex';
-    ui.intro.classList.remove('hidden');
-
-    // Destroy worker and re-init
-    if (engine.worker) {
-        engine.worker.terminate();
-        engine.worker = null;
-    }
-
-    autoStart();
-};
-
 // Pause Logic
-ui.pauseBtn.addEventListener('click', () => {
+function togglePause() {
     isPaused = !isPaused;
-    ui.pauseBtn.textContent = isPaused ? '▶' : '⏸';
-    ui.statusText.textContent = isPaused ? "Paused" : "Resuming...";
 
-    if (!isPaused && !engine.isGenerating) {
-        nextCycle();
-    } else if (isPaused && loopTimer) {
-        clearTimeout(loopTimer);
+    if (isPaused) {
+        ui.pauseOverlay.classList.remove('hidden');
+        ui.pauseOverlay.classList.add('visible');
+        if (loopTimer) clearTimeout(loopTimer);
+    } else {
+        ui.pauseOverlay.classList.remove('visible');
+        setTimeout(() => ui.pauseOverlay.classList.add('hidden'), 300);
+        // Resume if not generating
+        if (!engine.isGenerating) {
+            nextCycle();
+        }
     }
+}
+
+document.body.addEventListener('click', () => {
+    // Prevent pause toggle if clicking within the visible greeting area?
+    // User requested "click on any part of the browser".
+    togglePause();
 });
 
 // Auto-start sequence
 function autoStart() {
-    // Show progress immediately
     ui.progress.classList.add('visible');
 
-    // Bind Engine Callbacks
     engine.onStatus = (msg) => {
-        // Only show status updates if we are in initial loading phase or it's important
         if (!ui.greetingDisplay.classList.contains('active')) {
-            const loadingText = document.getElementById('loading-text');
-            if (loadingText) loadingText.textContent = msg;
+            if (ui.loadingText) ui.loadingText.textContent = msg;
             ui.statusText.textContent = msg;
 
             if (msg === "Neural core active") {
-                // Transition UI: Hide intro/loading, show display
-                ui.intro.classList.add('hidden');
-                setTimeout(() => {
-                    ui.intro.style.display = 'none';
-                    ui.greetingDisplay.classList.add('active');
-                    nextCycle();
-                }, 800);
+                // Done loading
+                ui.intro.style.display = 'none'; // Hard hide to prevent interaction
+                ui.greetingDisplay.classList.add('active'); // Helper class, though we removed it from CSS, helpful for logical state
+                nextCycle();
             }
         }
     };
@@ -415,99 +330,92 @@ function autoStart() {
     };
 
     engine.onToken = (text) => {
-        // Simple state-based filtering for <think> tags during streaming
+        // Strip think tags
         if (text.includes('<think>')) {
             engine.isThinking = true;
-            // Handle case where <think> and text are in the same chunk
-            const parts = text.split('<think>');
-            if (parts[0]) {
-                const span = document.createElement('span');
-                span.textContent = parts[0];
-                ui.greetingText.appendChild(span);
-            }
             return;
         }
-
         if (text.includes('</think>')) {
             engine.isThinking = false;
-            // Handle case where </think> and text are in the same chunk
+            // potential trail content
             const parts = text.split('</think>');
-            if (parts[1]) {
-                const span = document.createElement('span');
-                span.textContent = parts[1];
-                ui.greetingText.appendChild(span);
-            }
+            if(parts[1]) appendText(parts[1]);
             return;
         }
-
         if (engine.isThinking) return;
 
-        const span = document.createElement('span');
-        span.textContent = text;
-        ui.greetingText.appendChild(span);
-        // Ensure visibility
-        if (ui.greetingDisplay.style.opacity === '0') {
-             ui.greetingDisplay.style.opacity = '1';
-        }
+        appendText(text);
     };
 
     engine.onComplete = () => {
-        ui.statusText.textContent = isPaused ? "Paused" : "Waiting for next cycle...";
-        ui.statusText.classList.remove('blinking-cursor');
+        // Prune old text after each generation
+        pruneOldText();
 
-        // Update timestamp
-        const now = new Date();
-        ui.timestamp.textContent = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-
-        // Loop
         if (!isPaused) {
-            loopTimer = setTimeout(nextCycle, 10000); // 10 seconds reading time
+            loopTimer = setTimeout(nextCycle, 2000); // 2 seconds between greetings for flow
         }
     };
 
     engine.onError = (err) => {
-        console.error("LLM Engine Error Callback:", err);
-        ui.statusText.textContent = "Error: " + err;
-        ui.statusText.style.color = "var(--accent-error)";
-        // If error, try to recover or just wait
+        console.error("LLM Error:", err);
+        // Retry
         setTimeout(nextCycle, 5000);
     };
 
-    // Start Engine
     engine.init();
+}
 
-    // Update model tag in UI
-    const modelTag = document.getElementById('model-tag');
-    if (modelTag) {
-        modelTag.textContent = engine.currentSpec.name;
-    }
+function appendText(text) {
+    if (!currentBlock) return;
+
+    const span = document.createElement('span');
+    span.textContent = text;
+    currentBlock.appendChild(span);
+
+    // Auto-scroll logic
+    // We want to scroll to the bottom of the page
+    window.scrollTo(0, document.body.scrollHeight);
 }
 
 function nextCycle() {
-    if (!engine.isReady) return;
-    // Fade out
-    ui.greetingDisplay.style.opacity = 0;
+    if (!engine.isReady || isPaused) return;
 
-    setTimeout(() => {
-        ui.greetingText.innerHTML = ""; // Clear
-        ui.greetingDisplay.style.opacity = 1;
-        ui.statusText.textContent = "Generating...";
-        ui.statusText.classList.add('blinking-cursor');
+    // Create new block
+    currentBlock = document.createElement('div');
+    currentBlock.className = 'greeting-block';
 
-        engine.generateGreeting();
-    }, 1000);
+    // Create text container
+    const textDiv = document.createElement('div');
+    textDiv.className = 'greeting-text';
+    currentBlock.appendChild(textDiv);
+
+    ui.greetingContent.appendChild(currentBlock);
+
+    // Update reference to where we append text
+    currentBlock = textDiv; // Dirty hack: reuse currentBlock to point to the inner div
+
+    engine.generateGreeting();
 }
 
-ui.nextBtn.addEventListener('click', () => {
-    if (loopTimer) clearTimeout(loopTimer);
-    nextCycle();
-});
+function pruneOldText() {
+    // "Text outside window can be deleted"
+    // We check the children of greetingContent
+    const blocks = Array.from(ui.greetingContent.children);
+    if (blocks.length < 3) return; // Keep at least a few
 
-// Initial Status
-ui.statusText.textContent = navigator.gpu ? "System Ready (WebGPU Detected)" : "System Ready (CPU Mode)";
+    // Basic pruning: if more than 10 blocks, remove the oldest
+    // Better pruning: check position
 
-// Sync UI once at start
-syncUIFromSettings();
+    // Let's remove blocks that are completely above the viewport
+    // Since we are auto-scrolling down, the top blocks go out of view.
 
-// Launch
+    const reloadThreshold = -window.innerHeight * 2; // Extra buffer
+
+    // We can just remove the first child if we have too many
+    if (blocks.length > 5) {
+        ui.greetingContent.removeChild(blocks[0]);
+    }
+}
+
+// Initial Launch
 autoStart();

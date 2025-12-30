@@ -360,7 +360,9 @@ const ui = {
     progressFill: document.querySelector('.progress-fill'),
     pauseOverlay: document.getElementById('pause-overlay'),
     langSelect: document.getElementById('lang-select'),
-    thinkingIndicator: document.getElementById('thinking-indicator')
+    thinkingIndicator: document.getElementById('thinking-indicator'),
+    startBtn: document.getElementById('start-btn'),
+    spinner: document.querySelector('.spinner')
 };
 
 // --- UTILS: Typing & Queue ---
@@ -413,7 +415,13 @@ class Typewriter {
 const engine = new LLMEngine();
 const queue = new GreetingQueue();
 let isTyping = false;
-let isPaused = false;
+let isPaused = true; // Start paused to wait for user interaction
+
+// Background Music
+const bgMusic = new Audio('assets/song.mp3');
+bgMusic.loop = true;
+bgMusic.volume = 0.4;
+let hasStarted = false; // Track if user has pressed 'Start'
 
 // Background
 new SnowfallBackground('bg-canvas');
@@ -423,17 +431,23 @@ function togglePause() {
     isPaused = !isPaused;
 
     if (isPaused) {
+        ui.pauseOverlay.classList.add('visible', 'paused');
         ui.pauseOverlay.classList.remove('hidden');
-        ui.pauseOverlay.classList.add('visible');
+        bgMusic.pause();
     } else {
         ui.pauseOverlay.classList.remove('visible');
-        setTimeout(() => ui.pauseOverlay.classList.add('hidden'), 300);
+        ui.pauseOverlay.classList.remove('paused');
+        setTimeout(() => {
+            if (!isPaused) ui.pauseOverlay.classList.add('hidden');
+        }, 300);
+        bgMusic.play().catch(e => console.error("Audio play failed:", e));
     }
 }
 
-document.body.addEventListener('click', () => {
-    // Prevent pause toggle if clicking within the visible greeting area?
-    // User requested "click on any part of the browser".
+document.body.addEventListener('click', (e) => {
+    // Prevent pause toggle if clicking on the language selector
+    if (e.target.closest('#lang-select')) return;
+
     togglePause();
 });
 
@@ -465,14 +479,25 @@ function autoStart() {
     initLangSelector();
     ui.progress.classList.add('visible');
 
-    engine.onStatus = (msg) => {
-        if (!ui.greetingDisplay.classList.contains('active')) {
-            ui.statusText.textContent = msg;
+    // Initialize Start Button immediately
+    if (ui.startBtn) {
+        ui.startBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            startApp();
+        });
+    }
 
-            if (msg === "Neural core active") {
-                // Done loading
-                ui.intro.style.display = 'none'; // Hard hide to prevent interaction
-                ui.greetingDisplay.classList.add('active'); // Helper class, though we removed it from CSS, helpful for logical state
+    engine.onStatus = (msg) => {
+        if (!hasStarted) {
+            ui.statusText.textContent = msg;
+        }
+
+        if (msg === "Neural core active") {
+            if (ui.spinner) ui.spinner.classList.add('hidden');
+            if (ui.startBtn) ui.startBtn.textContent = "Entzr thz Void";
+
+            // If user already started, trigger the first generation
+            if (hasStarted && !engine.isGenerating && queue.length === 0 && !isTyping) {
                 engine.generateGreeting();
             }
         }
@@ -506,6 +531,29 @@ function autoStart() {
     };
 
     engine.init();
+}
+
+function startApp() {
+    if (hasStarted) return;
+    hasStarted = true;
+
+    ui.intro.classList.add('hidden');
+    // Hide startup UI elements
+    if (ui.startBtn) ui.startBtn.classList.add('hidden');
+    if (ui.statusText) ui.statusText.classList.add('hidden');
+    if (ui.progress) ui.progress.classList.add('hidden');
+    if (ui.spinner) ui.spinner.classList.add('hidden');
+
+    if (isPaused) {
+        togglePause();
+    }
+
+    // If model is already ready, start generating
+    if (engine.isReady) {
+        engine.generateGreeting();
+    } else {
+        console.log("App started but engine not ready. Waiting for 'Neural core active'...");
+    }
 }
 
 async function processQueue() {

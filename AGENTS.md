@@ -44,10 +44,5 @@ The single-page entry point with a minimal UI ("Neuromorphic Dark Mode").
 2.  Modify the `MODEL_CONFIG` object.
 3.  Ensure the `model` ID is compatible with [transformers.js](https://huggingface.co/docs/transformers.js).
 
-## How to Run
-This project MUST be served over HTTP due to Web Worker and ES Module security restrictions.
--   Use `python -m http.server` or `npx serve`.
--   Access via `http://localhost:8000`.
-
 > [!IMPORTANT]
 > WebGPU requires a compatible browser (e.g., Chrome/Edge/Arc) and hardware. If WebGPU is unavailable, the engine will fallback to WASM (CPU), which is significantly slower.

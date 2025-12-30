@@ -1,33 +1,33 @@
 import { WORKER_CODE } from './llm-worker.js';
 import { LANGUAGES, DEFAULT_LANG } from './languages.js';
 
-const MODEL_CONFIG = {
-    id: "smollm2-135m",
-    name: "SmolLM2 135M",
-    model: "onnx-community/SmolLM2-135M-Instruct-ONNX-MHA",
-    hardware: "webgpu",
-    dtype: "q4",
-    params: {
-        temperature: 0.5,
-        max_new_tokens: 2048,
-        repetition_penalty: 1.2,
-        top_p: 0.9,
-    }
-};
-
 // const MODEL_CONFIG = {
-//     id: "qwen3-0.6b",
-//     name: "Qwen3 0.6B",
-//     model: "onnx-community/Qwen3-0.6B-ONNX",
+//     id: "smollm2-135m",
+//     name: "SmolLM2 135M",
+//     model: "onnx-community/SmolLM2-135M-Instruct-ONNX-MHA",
 //     hardware: "webgpu",
 //     dtype: "q4",
 //     params: {
-//       temperature: 0.7,
-//       max_new_tokens: 4096,
-//       repetition_penalty: 1.15,
-//       top_p: 0.9,
+//         temperature: 0.5,
+//         max_new_tokens: 2048,
+//         repetition_penalty: 1.2,
+//         top_p: 0.9,
 //     }
-//   };
+// };
+
+const MODEL_CONFIG = {
+    id: "qwen3-0.6b",
+    name: "Qwen3 0.6B",
+    model: "onnx-community/Qwen3-0.6B-ONNX",
+    hardware: "webgpu",
+    dtype: "q4",
+    params: {
+      temperature: 0.7,
+      max_new_tokens: 4096,
+      repetition_penalty: 1.15,
+      top_p: 0.9,
+    }
+  };
 
 // --- VISUALS: Snowfall Background ---
 class SnowfallBackground {
@@ -162,8 +162,9 @@ class LLMEngine {
     }
 
     detectLang() {
+        const storedLang = localStorage.getItem('app-lang');
         const browserLang = navigator.language || navigator.userLanguage || DEFAULT_LANG;
-        const code = browserLang.split('-')[0].toLowerCase();
+        const code = (storedLang || browserLang.split('-')[0]).toLowerCase();
         this.langCode = LANGUAGES[code] ? code : DEFAULT_LANG;
         this.langName = LANGUAGES[this.langCode].name;
         console.log("Internal prompt language:", this.langName);
@@ -230,12 +231,24 @@ class LLMEngine {
                     return;
                 }
                 if (this.isThinking) return;
+
+                if (this.currentBuffer === "" && msg.text.trim() !== "") {
+                    console.log(`[LLM] First token received for ${msg.requestId}`);
+                }
+
                 this.currentBuffer += msg.text;
-                this.onToken(msg.text); // keep for legacy/progress if needed, though we'll use buffer
+                this.onToken(msg.text);
                 break;
             case "done": {
+                if (this.generationTimeout) clearTimeout(this.generationTimeout);
                 this.isGenerating = false;
                 const cleanText = this.normalizeText(this.currentBuffer || msg.text);
+
+                console.group(`[LLM Response] ${msg.requestId}`);
+                console.log("Raw Response:", this.currentBuffer || msg.text);
+                console.log("Cleaned Text:", cleanText);
+                console.groupEnd();
+
                 this.currentBuffer = ""; // Reset
                 this.history.push(cleanText);
                 if (this.history.length > 5) this.history.shift();
@@ -243,6 +256,7 @@ class LLMEngine {
                 break;
             }
             case "error":
+                if (this.generationTimeout) clearTimeout(this.generationTimeout);
                 console.error("LLMEngine Message Error:", msg);
                 this.isGenerating = false;
                 this.onError(msg.message);
@@ -260,7 +274,15 @@ class LLMEngine {
     }
 
     generateGreeting() {
-        if (!this.isReady || this.isGenerating) return;
+        if (!this.isReady) {
+            console.warn("[LLM] Engine not ready, skipping generation");
+            return;
+        }
+        if (this.isGenerating) {
+            console.warn("[LLM] Already generating, skipping overlapping request");
+            return;
+        }
+
         this.isGenerating = true;
 
         const promptData = this.buildPrompt();
@@ -278,8 +300,23 @@ class LLMEngine {
             }
         };
 
-        // console.log("LLM Request:", request);
+        console.group(`[LLM Request] ${request.requestId}`);
+        console.log("System Prompt:", promptData.messages.find(m => m.role === 'system')?.content);
+        console.log("User Prompt:", promptData.messages.find(m => m.role === 'user')?.content);
+        console.log("Full Request Object:", request);
+        console.groupEnd();
+
         this.worker.postMessage(request);
+
+        // Watchdog timeout: if we don't get 'done' or 'error' in 120s, something is wrong
+        if (this.generationTimeout) clearTimeout(this.generationTimeout);
+        this.generationTimeout = setTimeout(() => {
+            if (this.isGenerating) {
+                console.error(`[LLM] Generation timeout for ${request.requestId}. Resetting state.`);
+                this.isGenerating = false;
+                this.onError("Generation timed out");
+            }
+        }, 120000); // 2 minutes should be plenty even for slow devices
     }
 
     buildPrompt() {
@@ -417,13 +454,8 @@ function initLangSelector() {
     ui.langSelect.addEventListener('change', (e) => {
         const newLang = e.target.value;
         if (LANGUAGES[newLang]) {
-            engine.langCode = newLang;
-            engine.langName = LANGUAGES[newLang].name;
-            console.log("Language changed to:", engine.langName);
-
-            // Optional: visual feedback or immediate regeneration?
-            // Existing flow will pick it up on next cycle.
-            // If paused, it stays paused.
+            localStorage.setItem('app-lang', newLang);
+            location.reload();
         }
     });
 }

@@ -63,6 +63,8 @@ async function generate({ requestId, messages, prompt, options }) {
     text_start = prompt;
   }
 
+  console.log(\`[Worker] Starting generation for \${requestId}\`, { text_start });
+
   try {
     const inputs = await tokenizer(text_start);
 
@@ -75,10 +77,11 @@ async function generate({ requestId, messages, prompt, options }) {
     const decoded = tokenizer.batch_decode(out, { skip_special_tokens: true });
     let final = decoded[0];
 
+    console.log(\`[Worker] Finished generation for \${requestId}\`, { final });
     post("done", { requestId, text: final });
 
   } catch (e) {
-    console.error("Worker generate error:", e);
+    console.error(\`[Worker] Generation error for \${requestId}:\`, e);
     post("error", { requestId, message: e.message });
   }
 }

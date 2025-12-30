@@ -7,7 +7,7 @@ export const SPECS = [
     dtype: "q4f16",
     params: {
       temperature: 0.7,
-      max_new_tokens: 300,
+      max_new_tokens: 4096,
       repetition_penalty: 1.15,
       top_p: 0.9,
     }

@@ -3,9 +3,9 @@ export const DEFAULT_LANG = 'en';
 export const LANGUAGES = {
     'en': {
         name: 'English',
-        system: `You are a professional New Year greeting generator. 
-Output ONLY the greeting text in the specified language. 
-No headings, no meta-talk, no surrounding quotes.`,
+        system: `You are a professional New Year greeting generator.
+Output ONLY the greeting text in the specified language.
+No headings, no meta-talk, no surrounding quotes. Do NOT use <think> tags or output internal reasoning.`,
         styles: {
             warm: "warm, soulful, and family-oriented",
             poetic: "imaginative, metaphorical, and beautiful",
@@ -24,7 +24,7 @@ Final instruction: Output only the greeting text in English.`
     },
     'ru': {
         name: 'Russian',
-        system: "Ты профессиональный генератор новогодних поздравлений. Пиши ТОЛЬКО текст поздравления, без пояснений и кавычек.",
+        system: "Ты профессиональный генератор новогодних поздравлений. Пиши ТОЛЬКО текст поздравления, без пояснений и кавычек. ЗАПРЕЩЕНО использовать тег <think> и выводить внутренние размышления.",
         styles: {
             warm: "душевное, теплое и семейное",
             poetic: "образное, поэтичное и красивое",
@@ -41,7 +41,7 @@ ${avoid ? `Не повторяй эти фразы: ${avoid}.` : ""}
     },
     'uk': {
         name: 'Ukrainian',
-        system: "Ти професійний генератор новорічних привітань. Пиши ТІЛЬКИ текст привітання, без пояснень та лапок.",
+        system: "Ти професійний генератор новорічних привітань. Пиши ТІЛЬКИ текст привітання, без пояснень та лапок. ЗАБОРОНЕНО використовувати тег <think> та виводити внутрішні міркування.",
         styles: {
             warm: "душевне, тепле та сімейне",
             poetic: "образне, поетичне та красиве",
@@ -58,7 +58,7 @@ ${avoid ? `Не повторюй ці фрази: ${avoid}.` : ""}
     },
     'bg': {
         name: 'Bulgarian',
-        system: "Ти си професионален генератор на новогодишни поздрави. Пиши САМО текста на поздрава, без обяснения и кавички.",
+        system: "Ти си професионален генератор на новогодишни поздрави. Пиши САМО текста на поздрава, без обяснения и кавички. ЗАБРАНЕНО е използването на тага <think> и извеждането на вътрешни разсъждения.",
         styles: {
             warm: "душевно, топло и семейно",
             poetic: "образно, поетично и красиво",

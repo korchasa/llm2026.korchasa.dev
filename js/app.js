@@ -38,7 +38,7 @@ class NeuralBackground {
 
     animate() {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        
+
         // Draw Particles
         this.particles.forEach(p => {
             p.x += p.vx;
@@ -66,7 +66,7 @@ class NeuralBackground {
                 const dx = this.particles[i].x - this.particles[j].x;
                 const dy = this.particles[i].y - this.particles[j].y;
                 const dist = Math.sqrt(dx*dx + dy*dy);
-                
+
                 if (dist < 120) {
                     this.ctx.beginPath();
                     this.ctx.moveTo(this.particles[i].x, this.particles[i].y);
@@ -84,30 +84,33 @@ class NeuralBackground {
 class LLMEngine {
     constructor() {
         this.worker = null;
-        
+
         // Runtime Settings
         const savedSettings = localStorage.getItem('llmhny-settings');
         this.settings = savedSettings ? JSON.parse(savedSettings) : {
-            langMode: "auto", 
+            langMode: "auto",
             style: "random"
         };
 
         // Resolve spec
         this.resolveSpec();
-        
+
         this.history = [];
         this.isGenerating = false;
         this.isReady = false;
 
         // Auto-detect language
         this.detectLang();
-        
+
         // Callbacks
         this.onStatus = (msg) => console.log(msg);
         this.onProgress = () => {};
         this.onToken = () => {};
         this.onComplete = () => {};
         this.onError = () => {};
+
+        // Filtering state
+        this.isThinking = false;
     }
 
     resolveSpec() {
@@ -136,12 +139,12 @@ class LLMEngine {
 
     init() {
         if (this.worker) return;
-        
+
         try {
             const blob = new Blob([WORKER_CODE], { type: "text/javascript" });
             const url = URL.createObjectURL(blob);
             this.worker = new Worker(url, { type: "module" });
-            
+
             this.worker.onmessage = (ev) => this.handleMessage(ev);
             this.worker.onerror = (err) => {
                 console.error("Worker Thread Error:", err);
@@ -149,11 +152,11 @@ class LLMEngine {
             };
 
             // Start loading
-            this.worker.postMessage({ 
-                type: "load", 
-                model: this.config.model, 
-                device: this.config.device, 
-                dtype: this.config.dtype 
+            this.worker.postMessage({
+                type: "load",
+                model: this.config.model,
+                device: this.config.device,
+                dtype: this.config.dtype
             });
         } catch (e) {
             console.error("LLMEngine Init Error:", e);
@@ -204,6 +207,7 @@ class LLMEngine {
 
     normalizeText(s) {
         return (s || "")
+            .replace(/<think>[\s\S]*?<\/think>/g, "") // Strip think tags and content
             .replace(/\r/g, "")
             .replace(/[ \t]+\n/g, "\n")
             .replace(/\n{3,}/g, "\n\n")
@@ -240,24 +244,24 @@ class LLMEngine {
         const code = this.langCode;
         const langConfig = LANGUAGES[code];
         const defaultConfig = LANGUAGES[DEFAULT_LANG];
-        
+
         // Style Selection
         const styles = ["warm", "poetic", "inspirational", "tech-positive", "cozy", "funny"];
         let styleKey = this.settings.style;
         if (styleKey === "random" || !styles.includes(styleKey)) {
              styleKey = styles[Math.floor(Math.random() * styles.length)];
         }
-        
+
         // History avoidance
         const avoid = this.history.slice(-3).map(s => s.slice(0, 50)).join(" | ");
 
         const systemPrompt = langConfig.system || defaultConfig.system;
-        const styleDesc = (langConfig.styles ? langConfig.styles[styleKey] : null) || 
-                          (defaultConfig.styles[styleKey]) || 
+        const styleDesc = (langConfig.styles ? langConfig.styles[styleKey] : null) ||
+                          (defaultConfig.styles[styleKey]) ||
                           (langConfig.styles ? langConfig.styles.warm : defaultConfig.styles.warm);
-        
-        const userPrompt = langConfig.userTemplate ? 
-            langConfig.userTemplate(year, styleDesc, avoid) : 
+
+        const userPrompt = langConfig.userTemplate ?
+            langConfig.userTemplate(year, styleDesc, avoid) :
             defaultConfig.userTemplate(year, styleDesc, avoid).replace(/English/g, langConfig.name);
 
         return {
@@ -347,7 +351,7 @@ ui.applyBtn.addEventListener('click', () => {
 ui.resetBtn.addEventListener('click', () => {
     if (confirm("Reset all settings to defaults?")) {
         localStorage.removeItem('llmhny-settings');
-        location.reload(); 
+        location.reload();
     }
 });
 
@@ -358,13 +362,13 @@ const reloadModel = () => {
     ui.greetingDisplay.classList.remove('active');
     ui.intro.style.display = 'flex';
     ui.intro.classList.remove('hidden');
-    
+
     // Destroy worker and re-init
     if (engine.worker) {
         engine.worker.terminate();
         engine.worker = null;
     }
-    
+
     autoStart();
 };
 
@@ -373,7 +377,7 @@ ui.pauseBtn.addEventListener('click', () => {
     isPaused = !isPaused;
     ui.pauseBtn.textContent = isPaused ? '▶' : '⏸';
     ui.statusText.textContent = isPaused ? "Paused" : "Resuming...";
-    
+
     if (!isPaused && !engine.isGenerating) {
         nextCycle();
     } else if (isPaused && loopTimer) {
@@ -385,7 +389,7 @@ ui.pauseBtn.addEventListener('click', () => {
 function autoStart() {
     // Show progress immediately
     ui.progress.classList.add('visible');
-    
+
     // Bind Engine Callbacks
     engine.onStatus = (msg) => {
         // Only show status updates if we are in initial loading phase or it's important
@@ -405,12 +409,39 @@ function autoStart() {
             }
         }
     };
-    
+
     engine.onProgress = (pct) => {
         ui.progressFill.style.width = `${pct}%`;
     };
 
     engine.onToken = (text) => {
+        // Simple state-based filtering for <think> tags during streaming
+        if (text.includes('<think>')) {
+            engine.isThinking = true;
+            // Handle case where <think> and text are in the same chunk
+            const parts = text.split('<think>');
+            if (parts[0]) {
+                const span = document.createElement('span');
+                span.textContent = parts[0];
+                ui.greetingText.appendChild(span);
+            }
+            return;
+        }
+
+        if (text.includes('</think>')) {
+            engine.isThinking = false;
+            // Handle case where </think> and text are in the same chunk
+            const parts = text.split('</think>');
+            if (parts[1]) {
+                const span = document.createElement('span');
+                span.textContent = parts[1];
+                ui.greetingText.appendChild(span);
+            }
+            return;
+        }
+
+        if (engine.isThinking) return;
+
         const span = document.createElement('span');
         span.textContent = text;
         ui.greetingText.appendChild(span);
@@ -423,7 +454,7 @@ function autoStart() {
     engine.onComplete = () => {
         ui.statusText.textContent = isPaused ? "Paused" : "Waiting for next cycle...";
         ui.statusText.classList.remove('blinking-cursor');
-        
+
         // Update timestamp
         const now = new Date();
         ui.timestamp.textContent = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
@@ -456,13 +487,13 @@ function nextCycle() {
     if (!engine.isReady) return;
     // Fade out
     ui.greetingDisplay.style.opacity = 0;
-    
+
     setTimeout(() => {
         ui.greetingText.innerHTML = ""; // Clear
         ui.greetingDisplay.style.opacity = 1;
         ui.statusText.textContent = "Generating...";
         ui.statusText.classList.add('blinking-cursor');
-        
+
         engine.generateGreeting();
     }, 1000);
 }

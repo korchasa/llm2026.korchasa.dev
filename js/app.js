@@ -548,7 +548,7 @@ function autoStart() {
 
     engine.onComplete = (text) => {
         ui.thinkingIndicator.classList.remove('visible');
-        queue.push(engine.slopify(text));
+        queue.push(text);
         processQueue();
     };
 

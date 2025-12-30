@@ -22,7 +22,7 @@ const MODEL_CONFIG = {
     hardware: "webgpu",
     dtype: "q4f16",
     params: {
-      temperature: 0.7,
+      temperature: 0.4,
       max_new_tokens: 4096,
       repetition_penalty: 1.15,
       top_p: 0.9,
@@ -65,6 +65,8 @@ class SnowfallBackground {
     animate() {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
+        const globalGlitch = Math.random() < 0.002;
+
         this.particles.forEach(p => {
             p.x += p.vx;
             p.y += p.vy;
@@ -86,30 +88,52 @@ class SnowfallBackground {
             let drawSize = p.size;
             let drawAlpha = p.alpha;
             let shape = 'circle';
+            let color = '255, 255, 255'; // Default white
 
-            // 1. Position Jitter (Teleport) - low chance
-            if (Math.random() < 0.005) {
-                drawX += (Math.random() - 0.5) * 50;
-                drawY += (Math.random() - 0.5) * 20;
+            const glitchChance = globalGlitch ? 0.3 : 0.01;
+
+            // 1. Position Jitter (Teleport)
+            if (Math.random() < glitchChance) {
+                drawX += (Math.random() - 0.5) * (globalGlitch ? 300 : 100);
+                drawY += (Math.random() - 0.5) * (globalGlitch ? 100 : 40);
             }
 
-            // 2. Shape Artifact (Square or Line) - low chance
-            if (Math.random() < 0.01) {
-                shape = Math.random() > 0.5 ? 'square' : 'line';
+            // 2. Shape Artifact (Square, Line, or Stretch)
+            const shapeRand = Math.random();
+            if (shapeRand < (globalGlitch ? 0.15 : 0.03)) {
+                if (shapeRand < 0.01) shape = 'square';
+                else if (shapeRand < 0.02) shape = 'line';
+                else shape = 'stretch';
             }
 
-            // 3. Alpha Flicker - medium chance
-            if (Math.random() < 0.05) {
+            // 3. Alpha Flicker
+            if (Math.random() < (globalGlitch ? 0.5 : 0.1)) {
                 drawAlpha = Math.random();
             }
 
-            this.ctx.fillStyle = `rgba(255, 255, 255, ${drawAlpha})`;
-            this.ctx.beginPath();
+            // 4. Color Glitch (Cyan/Magenta)
+            if (Math.random() < (globalGlitch ? 0.2 : 0.02)) {
+                color = Math.random() > 0.5 ? '0, 255, 255' : '255, 0, 255';
+            }
 
+            this.ctx.fillStyle = `rgba(${color}, ${drawAlpha})`;
+
+            // 5. Chromatic Aberration (Double drawing with offset)
+            if (Math.random() < (globalGlitch ? 0.1 : 0.01)) {
+                this.ctx.fillStyle = `rgba(0, 255, 255, ${drawAlpha * 0.5})`;
+                this.ctx.fillRect(drawX - 2, drawY, drawSize, drawSize);
+                this.ctx.fillStyle = `rgba(255, 0, 255, ${drawAlpha * 0.5})`;
+                this.ctx.fillRect(drawX + 2, drawY, drawSize, drawSize);
+                this.ctx.fillStyle = `rgba(${color}, ${drawAlpha})`;
+            }
+
+            this.ctx.beginPath();
             if (shape === 'square') {
-                this.ctx.fillRect(drawX, drawY, drawSize * 2, drawSize * 2);
+                this.ctx.fillRect(drawX, drawY, drawSize * 3, drawSize * 3);
             } else if (shape === 'line') {
-                this.ctx.fillRect(drawX - 10, drawY, 20, 2);
+                this.ctx.fillRect(drawX - 20, drawY, 40, 1);
+            } else if (shape === 'stretch') {
+                this.ctx.fillRect(drawX - drawSize * 2, drawY, drawSize * 4, 1);
             } else {
                 this.ctx.arc(drawX, drawY, drawSize, 0, Math.PI * 2);
                 this.ctx.fill();

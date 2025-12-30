@@ -206,10 +206,10 @@ class LLMEngine {
             case "status":
                 if (msg.state === 'loading') {
                      this.isReady = false;
-                     this.onStatus(msg.message);
+                     this.onStatus(this.slopify(msg.message));
                 } else if (msg.state === 'ready') {
                      this.isReady = true;
-                     this.onStatus("Neural core active");
+                     this.onStatus(this.slopify("Neural core active"), true); // true means it's the 'ready' signal
                 }
                 break;
             case "progress": {
@@ -272,6 +272,33 @@ class LLMEngine {
             .replace(/[ \t]+\n/g, "\n")
             .replace(/\n{3,}/g, "\n\n")
             .trim();
+    }
+
+    slopify(text) {
+        if (!text) return "";
+        const words = text.split(/\s+/);
+
+        const mutations = [
+            (w) => w.replace(/m/gi, 'rn'),
+            (w) => w.replace(/w/gi, 'vv'),
+            (w) => w.replace(/n/gi, 'nn'),
+            (w) => w.replace(/l/gi, 'ii'),
+            (w) => w.length > 3 ? w.substring(0, 2) + w[2] + w.substring(2) : w + (w[w.length-1] || ""),
+            (w) => {
+                if (w.length < 4) return w + (w[w.length-1] || "");
+                const i = Math.floor(Math.random() * (w.length - 2)) + 1;
+                return w.substring(0, i) + w[i+1] + w[i] + w.substring(i+2);
+            }
+        ];
+
+        return words.map(word => {
+            // ~33% chance to slopify each word
+            if (Math.random() < 0.33) {
+                const mut = mutations[Math.floor(Math.random() * mutations.length)];
+                return mut(word);
+            }
+            return word;
+        }).join(' ');
     }
 
     generateGreeting() {
@@ -487,14 +514,14 @@ function autoStart() {
         });
     }
 
-    engine.onStatus = (msg) => {
+    engine.onStatus = (msg, isReadySignal = false) => {
         if (!hasStarted) {
             ui.statusText.textContent = msg;
         }
 
-        if (msg === "Neural core active") {
+        if (isReadySignal) {
             if (ui.spinner) ui.spinner.classList.add('hidden');
-            if (ui.startBtn) ui.startBtn.textContent = "Entzr thz Void";
+            if (ui.startBtn) ui.startBtn.textContent = engine.slopify("Enter the Void");
 
             // If user already started, trigger the first generation
             if (hasStarted && !engine.isGenerating && queue.length === 0 && !isTyping) {
@@ -513,7 +540,7 @@ function autoStart() {
 
     engine.onComplete = (text) => {
         ui.thinkingIndicator.classList.remove('visible');
-        queue.push(text);
+        queue.push(engine.slopify(text));
         processQueue();
     };
 

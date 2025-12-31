@@ -704,13 +704,20 @@ function initLangSelector() {
 // Auto-start sequence
 function autoStart() {
     initLangSelector();
-    ui.progress.classList.add('visible');
 
     // Initialize Start Button immediately
     if (ui.startBtn) {
         ui.startBtn.addEventListener('click', (e) => {
             e.stopPropagation();
+            
+            // Show loading UI
             ui.startBtn.classList.add('hidden');
+            if (ui.spinner) ui.spinner.classList.remove('hidden');
+            if (ui.statusText) ui.statusText.classList.remove('hidden');
+            if (ui.progress) ui.progress.classList.add('visible');
+            
+            // Initialize engine on click
+            engine.init();
         });
     }
 
@@ -730,7 +737,7 @@ function autoStart() {
         }
 
         engine.onStatus = (msg, isReadySignal = false) => {
-            if (!hasStarted) {
+            if (ui.statusText) {
                 ui.statusText.textContent = msg;
             }
 
@@ -745,7 +752,7 @@ function autoStart() {
     });
 
     engine.onProgress = (pct) => {
-        ui.progressFill.style.width = `${pct}%`;
+        if (ui.progressFill) ui.progressFill.style.width = `${pct}%`;
     };
 
     engine.onToken = (text) => {
@@ -770,8 +777,6 @@ function autoStart() {
             setTimeout(() => engine.generateGreeting(), 5000);
         }
     };
-
-    engine.init();
 }
 
 function startApp() {
